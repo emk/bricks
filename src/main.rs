@@ -15,8 +15,9 @@ fn main() {
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
-                .with_system(apply_velocity)
-                .with_system(play_collision_sound.after(apply_velocity)),
+                .with_system(detect_collisions)
+                .with_system(apply_velocity.before(detect_collisions))
+                .with_system(play_collision_sound.after(detect_collisions)),
         )
         .add_system(bevy::window::close_on_esc)
         .run();
@@ -83,29 +84,33 @@ fn setup(
     ));
 }
 
-fn apply_velocity(
+fn detect_collisions(
     bounds: Res<ScreenBounds>,
-    mut query: Query<(&mut Transform, &mut Velocity)>,
+    mut query: Query<(&Transform, &mut Velocity, With<Ball>)>,
     mut collision_events: EventWriter<CollisionEvent>,
 ) {
-    for (mut transform, mut velocity) in &mut query {
-        if transform.translation.x < bounds.bottom_left.x {
+    for (transform, mut velocity, _) in &mut query {
+        if transform.translation.x < bounds.bottom_left.x && velocity.x < 0. {
             collision_events.send_default();
             velocity.x = -velocity.x;
         }
-        if transform.translation.x >= bounds.top_right.x {
+        if transform.translation.x >= bounds.top_right.x && velocity.x > 0. {
             collision_events.send_default();
             velocity.x = -velocity.x;
         }
-        if transform.translation.y < bounds.bottom_left.y {
+        if transform.translation.y < bounds.bottom_left.y && velocity.y < 0. {
             collision_events.send_default();
             velocity.y = -velocity.y;
         }
-        if transform.translation.y >= bounds.top_right.y {
+        if transform.translation.y >= bounds.top_right.y && velocity.y > 0. {
             collision_events.send_default();
             velocity.y = -velocity.y;
         }
+    }
+}
 
+fn apply_velocity(mut query: Query<(&mut Transform, &Velocity)>) {
+    for (mut transform, velocity) in &mut query {
         transform.translation.x += velocity.x * TIME_STEP;
         transform.translation.y += velocity.y * TIME_STEP;
     }
