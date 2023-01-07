@@ -1,33 +1,25 @@
-use bevy::{prelude::*, sprite::MaterialMesh2dBundle, time::FixedTimestep};
+use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 
-// 1 physics tick.
-const TIME_STEP: f32 = 1.0 / 60.0;
+use crate::physics::{CollisionEvent, PhysicsPlugin, Velocity};
+
+mod physics;
 
 const BACKGROUND_COLOR: Color = Color::rgb(0.1, 0.1, 0.2);
 const BALL_COLOR: Color = Color::rgb(7.0, 0.7, 0.0);
 
 fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins)
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins)
+        .add_plugin(PhysicsPlugin)
         .insert_resource(ClearColor(BACKGROUND_COLOR))
         .add_startup_system(setup)
-        .add_event::<CollisionEvent>()
-        .add_system_set(
-            SystemSet::new()
-                .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
-                .with_system(detect_collisions)
-                .with_system(apply_velocity.before(detect_collisions))
-                .with_system(play_collision_sound.after(detect_collisions)),
-        )
+        .add_system(play_collision_sound)
         .add_system(bevy::window::close_on_esc)
         .run();
 }
 
 #[derive(Component)]
 struct Ball;
-
-#[derive(Component, Deref, DerefMut)]
-struct Velocity(Vec2);
 
 #[derive(Debug, Resource)]
 struct ScreenBounds {
@@ -36,10 +28,7 @@ struct ScreenBounds {
 }
 
 #[derive(Resource)]
-struct CollisionSound(Handle<AudioSource>);
-
-#[derive(Default)]
-struct CollisionEvent;
+pub struct CollisionSound(Handle<AudioSource>);
 
 fn setup(
     mut commands: Commands,
@@ -82,38 +71,6 @@ fn setup(
         Ball,
         Velocity(Vec2::new(0.5, 0.5).normalize() * ball_speed),
     ));
-}
-
-fn detect_collisions(
-    bounds: Res<ScreenBounds>,
-    mut query: Query<(&Transform, &mut Velocity, With<Ball>)>,
-    mut collision_events: EventWriter<CollisionEvent>,
-) {
-    for (transform, mut velocity, _) in &mut query {
-        if transform.translation.x < bounds.bottom_left.x && velocity.x < 0. {
-            collision_events.send_default();
-            velocity.x = -velocity.x;
-        }
-        if transform.translation.x >= bounds.top_right.x && velocity.x > 0. {
-            collision_events.send_default();
-            velocity.x = -velocity.x;
-        }
-        if transform.translation.y < bounds.bottom_left.y && velocity.y < 0. {
-            collision_events.send_default();
-            velocity.y = -velocity.y;
-        }
-        if transform.translation.y >= bounds.top_right.y && velocity.y > 0. {
-            collision_events.send_default();
-            velocity.y = -velocity.y;
-        }
-    }
-}
-
-fn apply_velocity(mut query: Query<(&mut Transform, &Velocity)>) {
-    for (mut transform, velocity) in &mut query {
-        transform.translation.x += velocity.x * TIME_STEP;
-        transform.translation.y += velocity.y * TIME_STEP;
-    }
 }
 
 fn play_collision_sound(
