@@ -1,3 +1,5 @@
+use std::f32::consts::*;
+
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 use bevy_rapier2d::prelude::*;
 
@@ -17,6 +19,7 @@ fn main() {
         .add_plugin(PhysicsPlugin)
         .insert_resource(ClearColor(BACKGROUND_COLOR))
         .add_startup_system(setup)
+        .add_system(fix_ball_angle)
         .add_system(paddle_input)
         .add_system(play_collision_sound)
         .add_system(bevy::window::close_on_esc)
@@ -164,6 +167,30 @@ fn setup(
         },
         FixedSpeed(ball_speed),
     ));
+}
+
+/// Another physics hack: Don't allow the ball to move _too_ horizontally,
+/// because it spends forever bouncing back and forth with no user interaction,
+/// which is boring.
+fn fix_ball_angle(mut query: Query<&mut Velocity, With<Ball>>) {
+    for mut velocity in &mut query {
+        let speed = velocity.linvel.length();
+        //let horizontal_speed = velocity.linvel.dot(Vec2::new(1., 0.)).abs();
+        //if horizontal_speed > speed * 0.8 {
+        let angle = Vec2::new(1., 0.).angle_between(velocity.linvel);
+
+        let new_angle = if angle >= 0. {
+            angle.clamp(FRAC_PI_6, PI - FRAC_PI_6)
+        } else {
+            angle.clamp(-2. * PI + FRAC_PI_6, -FRAC_PI_6)
+        };
+        if angle != new_angle {
+            eprintln!("fixed angle: {angle} -> {new_angle}");
+        }
+
+        velocity.linvel = Vec2::from_angle(new_angle).rotate(Vec2::new(speed, 0.));
+        //}
+    }
 }
 
 fn paddle_input(
