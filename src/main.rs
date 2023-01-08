@@ -1,11 +1,15 @@
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
+use bevy_rapier2d::prelude::*;
 
-use crate::physics::{CollisionEvent, PhysicsPlugin, Velocity};
+use crate::physics::{FixedSpeed, PhysicsPlugin};
 
 mod physics;
 
 const BACKGROUND_COLOR: Color = Color::rgb(0.1, 0.1, 0.2);
 const BALL_COLOR: Color = Color::rgb(7.0, 0.7, 0.0);
+const BALL_SIZE: f32 = 30.;
+const PADDLE_LENGTH: f32 = 150.;
+const WALL_THICKNESS: f32 = BALL_SIZE;
 
 fn main() {
     let mut app = App::new();
@@ -13,6 +17,7 @@ fn main() {
         .add_plugin(PhysicsPlugin)
         .insert_resource(ClearColor(BACKGROUND_COLOR))
         .add_startup_system(setup)
+        .add_system(paddle_input)
         .add_system(play_collision_sound)
         .add_system(bevy::window::close_on_esc)
         .run();
@@ -21,10 +26,26 @@ fn main() {
 #[derive(Component)]
 struct Ball;
 
-#[derive(Debug, Resource)]
+#[derive(Component)]
+struct Wall;
+
+#[derive(Component)]
+struct Paddle;
+
+#[derive(Debug)]
 struct ScreenBounds {
     bottom_left: Vec3,
     top_right: Vec3,
+}
+
+impl ScreenBounds {
+    fn width(&self) -> f32 {
+        self.top_right.x - self.bottom_left.x
+    }
+
+    fn height(&self) -> f32 {
+        self.top_right.y - self.bottom_left.y
+    }
 }
 
 #[derive(Resource)]
@@ -50,37 +71,128 @@ fn setup(
         top_right: camera_transform
             * Vec3::new(window.width() / 2., window.height() / 2., 0.),
     };
-
-    // window.width()
     println!("bounds: {:?}", bounds);
-    commands.insert_resource(bounds);
 
     commands.insert_resource(CollisionSound(asset_server.load("click.ogg")));
 
-    // Ball
-    let ball_pos = Vec3::new(0.0, 0.0, 1.0);
-    let ball_size = Vec3::new(30.0, 30.0, 30.0);
-    let ball_speed = 1000.0;
+    // Create our walls.
     commands.spawn((
+        RigidBody::Fixed,
+        Collider::cuboid(WALL_THICKNESS / 2., bounds.height() / 2.),
+        TransformBundle::from(Transform::from_xyz(
+            -bounds.width() / 2. + WALL_THICKNESS / 2.,
+            0.,
+            0.,
+        )),
+    ));
+    commands.spawn((
+        RigidBody::Fixed,
+        Collider::cuboid(WALL_THICKNESS / 2., bounds.height() / 2.),
+        TransformBundle::from(Transform::from_xyz(
+            bounds.width() / 2. - WALL_THICKNESS / 2.,
+            0.,
+            0.,
+        )),
+    ));
+    commands.spawn((
+        RigidBody::Fixed,
+        Collider::cuboid(bounds.width() / 2. - WALL_THICKNESS, WALL_THICKNESS / 2.),
+        TransformBundle::from(Transform::from_xyz(
+            0.,
+            -bounds.height() / 2. + WALL_THICKNESS / 2.,
+            0.,
+        )),
+    ));
+    commands.spawn((
+        RigidBody::Fixed,
+        Collider::cuboid(bounds.width() / 2. - WALL_THICKNESS, WALL_THICKNESS / 2.),
+        TransformBundle::from(Transform::from_xyz(
+            0.,
+            bounds.height() / 2. - WALL_THICKNESS / 2.,
+            0.,
+        )),
+    ));
+
+    // Paddle.
+    commands.spawn((
+        Paddle,
+        RigidBody::Dynamic,
+        Collider::capsule(
+            Vec2::new(-PADDLE_LENGTH / 2., 0.0),
+            Vec2::new(PADDLE_LENGTH / 2., 0.0),
+            WALL_THICKNESS / 2.,
+        ),
+        LockedAxes::ROTATION_LOCKED,
+        TransformBundle::from(
+            Transform::from_xyz(0.0, -bounds.height() / 2. + BALL_SIZE * 3., 0.0), //.rotate_z(std::f32::consts::PI / 4.),
+        ),
+        GravityScale(0.),
+        Velocity {
+            linvel: Vec2::new(0., 0.),
+            angvel: 0.,
+        },
+    ));
+
+    // Create our ball.
+    let ball_pos = Vec3::new(0.0, 0.0, 1.0);
+    let ball_speed = 750.0;
+    commands.spawn((
+        Ball,
         MaterialMesh2dBundle {
-            mesh: meshes.add(shape::Circle::default().into()).into(),
+            mesh: meshes.add(shape::Circle::new(BALL_SIZE / 2.).into()).into(),
             material: materials.add(ColorMaterial::from(BALL_COLOR)),
-            transform: Transform::from_translation(ball_pos).with_scale(ball_size),
+            transform: Transform::from_translation(ball_pos),
             ..default()
         },
-        Ball,
-        Velocity(Vec2::new(0.5, 0.5).normalize() * ball_speed),
+        RigidBody::Dynamic,
+        Collider::ball(BALL_SIZE / 2.),
+        LockedAxes::ROTATION_LOCKED,
+        Ccd::enabled(),
+        GravityScale(0.),
+        Restitution {
+            coefficient: 1.0,
+            combine_rule: CoefficientCombineRule::Max,
+        },
+        Friction {
+            coefficient: 0.0,
+            combine_rule: CoefficientCombineRule::Min,
+        },
+        ActiveEvents::COLLISION_EVENTS,
+        Velocity {
+            linvel: Vec2::new(1., 1.).normalize() * ball_speed,
+            angvel: 0.,
+        },
+        FixedSpeed(ball_speed),
     ));
 }
 
+fn paddle_input(
+    keyboard_input: Res<Input<KeyCode>>,
+    mut query: Query<&mut Velocity, With<Paddle>>,
+) {
+    let mut direction = 0.0;
+    if keyboard_input.pressed(KeyCode::Left) {
+        direction -= 1.0;
+    }
+    if keyboard_input.pressed(KeyCode::Right) {
+        direction += 1.0;
+    }
+
+    let mut velocity = query.single_mut();
+    velocity.linvel = Vec2::new(1000., 0.) * direction;
+}
+
 fn play_collision_sound(
-    collision_events: EventReader<CollisionEvent>,
+    mut collision_events: EventReader<CollisionEvent>,
     audio: Res<Audio>,
     sound: Res<CollisionSound>,
 ) {
-    // Only play a single sound, and clear the event for the next frame.
-    if !collision_events.is_empty() {
-        collision_events.clear();
+    let starting_collision = collision_events
+        .iter()
+        .any(|e| matches!(e, CollisionEvent::Started(_, _, _)));
+
+    // Only play a single sound.
+    if starting_collision {
         audio.play(sound.0.clone());
     }
 }
