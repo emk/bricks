@@ -3,7 +3,7 @@ use std::f32::consts::*;
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 use bevy_rapier2d::prelude::*;
 
-use crate::physics::{FixedSpeed, PhysicsPlugin};
+use crate::physics::{FixedSpeed, PhysicsPlugin, WallPhysicsBundle};
 
 mod physics;
 
@@ -80,7 +80,7 @@ fn setup(
 
     // Create our walls.
     commands.spawn((
-        RigidBody::Fixed,
+        WallPhysicsBundle::default(),
         Collider::cuboid(WALL_THICKNESS / 2., bounds.height() / 2.),
         TransformBundle::from(Transform::from_xyz(
             -bounds.width() / 2. + WALL_THICKNESS / 2.,
@@ -89,7 +89,7 @@ fn setup(
         )),
     ));
     commands.spawn((
-        RigidBody::Fixed,
+        WallPhysicsBundle::default(),
         Collider::cuboid(WALL_THICKNESS / 2., bounds.height() / 2.),
         TransformBundle::from(Transform::from_xyz(
             bounds.width() / 2. - WALL_THICKNESS / 2.,
@@ -98,7 +98,7 @@ fn setup(
         )),
     ));
     commands.spawn((
-        RigidBody::Fixed,
+        WallPhysicsBundle::default(),
         Collider::cuboid(bounds.width() / 2. - WALL_THICKNESS, WALL_THICKNESS / 2.),
         TransformBundle::from(Transform::from_xyz(
             0.,
@@ -107,7 +107,7 @@ fn setup(
         )),
     ));
     commands.spawn((
-        RigidBody::Fixed,
+        WallPhysicsBundle::default(),
         Collider::cuboid(bounds.width() / 2. - WALL_THICKNESS, WALL_THICKNESS / 2.),
         TransformBundle::from(Transform::from_xyz(
             0.,
@@ -130,6 +130,10 @@ fn setup(
             Transform::from_xyz(0.0, -bounds.height() / 2. + BALL_SIZE * 3., 0.0), //.rotate_z(std::f32::consts::PI / 4.),
         ),
         GravityScale(0.),
+        Restitution {
+            coefficient: 1.0,
+            combine_rule: CoefficientCombineRule::Max,
+        },
         Velocity {
             linvel: Vec2::new(0., 0.),
             angvel: 0.,
@@ -156,10 +160,6 @@ fn setup(
             coefficient: 1.0,
             combine_rule: CoefficientCombineRule::Max,
         },
-        Friction {
-            coefficient: 0.0,
-            combine_rule: CoefficientCombineRule::Min,
-        },
         ActiveEvents::COLLISION_EVENTS,
         Velocity {
             linvel: Vec2::new(1., 1.).normalize() * ball_speed,
@@ -175,8 +175,6 @@ fn setup(
 fn fix_ball_angle(mut query: Query<&mut Velocity, With<Ball>>) {
     for mut velocity in &mut query {
         let speed = velocity.linvel.length();
-        //let horizontal_speed = velocity.linvel.dot(Vec2::new(1., 0.)).abs();
-        //if horizontal_speed > speed * 0.8 {
         let angle = Vec2::new(1., 0.).angle_between(velocity.linvel);
 
         let new_angle = if angle >= 0. {
@@ -185,11 +183,10 @@ fn fix_ball_angle(mut query: Query<&mut Velocity, With<Ball>>) {
             angle.clamp(-2. * PI + FRAC_PI_6, -FRAC_PI_6)
         };
         if angle != new_angle {
-            eprintln!("fixed angle: {angle} -> {new_angle}");
+            debug!("fixed angle: {} -> {}", angle, new_angle);
         }
 
         velocity.linvel = Vec2::from_angle(new_angle).rotate(Vec2::new(speed, 0.));
-        //}
     }
 }
 
