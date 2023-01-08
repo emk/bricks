@@ -35,6 +35,9 @@ struct Wall;
 #[derive(Component)]
 struct Paddle;
 
+#[derive(Component)]
+struct Deadly;
+
 #[derive(Debug)]
 struct ScreenBounds {
     bottom_left: Vec3,
@@ -53,6 +56,9 @@ impl ScreenBounds {
 
 #[derive(Resource)]
 pub struct CollisionSound(Handle<AudioSource>);
+
+#[derive(Resource)]
+pub struct DeathSound(Handle<AudioSource>);
 
 fn setup(
     mut commands: Commands,
@@ -77,6 +83,7 @@ fn setup(
     println!("bounds: {:?}", bounds);
 
     commands.insert_resource(CollisionSound(asset_server.load("click.ogg")));
+    commands.insert_resource(DeathSound(asset_server.load("death.ogg")));
 
     // Create our walls.
     commands.spawn((
@@ -105,6 +112,7 @@ fn setup(
             -bounds.height() / 2. + WALL_THICKNESS / 2.,
             0.,
         )),
+        Deadly,
     ));
     commands.spawn((
         WallPhysicsBundle::default(),
@@ -209,14 +217,31 @@ fn paddle_input(
 fn play_collision_sound(
     mut collision_events: EventReader<CollisionEvent>,
     audio: Res<Audio>,
-    sound: Res<CollisionSound>,
+    collision_sound: Res<CollisionSound>,
+    death_sound: Res<DeathSound>,
+    world: &World,
 ) {
-    let starting_collision = collision_events
-        .iter()
-        .any(|e| matches!(e, CollisionEvent::Started(_, _, _)));
+    let mut starting_collision = false;
+    let mut death = false;
+    for c in collision_events.iter() {
+        if let CollisionEvent::Started(e1, e2, _) = c {
+            starting_collision = true;
+            if world.get::<Deadly>(*e1).is_some() || world.get::<Deadly>(*e2).is_some()
+            {
+                death = true;
+            }
+        }
+    }
+    // let starting_collision = collision_events
+    //     .iter()
+    //     .any(|e| matches!(e, CollisionEvent::Started(e1, e2, _)));
 
     // Only play a single sound.
     if starting_collision {
-        audio.play(sound.0.clone());
+        if death {
+            audio.play(death_sound.0.clone());
+        } else {
+            audio.play(collision_sound.0.clone());
+        }
     }
 }

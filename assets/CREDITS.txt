@@ -3,3 +3,9 @@ Sound: click.ogg
 Author: adgawrhbshbffsfgvsrf
 Source: https://freesound.org/people/adgawrhbshbffsfgvsrf/sounds/492020/
 License: http://creativecommons.org/publicdomain/zero/1.0/
+
+Original: 145788__cyberios__small-explosion.wav
+Sound: death.ogg
+Author: Cyberios
+Source: https://freesound.org/people/Cyberios/sounds/145788/
+License: http://creativecommons.org/publicdomain/zero/1.0/
